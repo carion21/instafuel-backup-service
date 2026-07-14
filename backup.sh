@@ -199,17 +199,22 @@ cleanup_with_safeguard() {
 
   # mc rm --older-than utilise le timestamp serveur MinIO (F12: pas de dépendance BusyBox)
   local deleted
-  deleted=$(mc rm --force --older-than "${RETENTION}" "backup-target/${prefix}" 2>&1 | grep -c "Removed" || true)
+  deleted=$(mc rm --recursive --force --older-than "${RETENTION}" "backup-target/${prefix}" 2>&1 | grep -c "Removed" || true)
   deleted=${deleted:-0}
 
   local after_count
   after_count=$(mc ls "backup-target/${prefix}" 2>/dev/null | grep -c "${env_prefix}" || true)
   after_count=${after_count:-0}
 
-  # F4: Si deleted > kept * 2 → anomalie
-  if [ "$deleted" -gt 0 ] && [ "$deleted" -gt $((after_count * 2)) ]; then
+  # F4: Garde-fou anti-suppression catastrophique
+  # Si tout a été supprimé ET qu'il y avait > 5 backups → suspect
+  if [ "$after_count" -eq 0 ] && [ "$before_count" -gt 5 ]; then
+    log "❌ F4: ANOMALIE — ${before_count} backups tous supprimés d'un coup. Arrêt."
+    exit 1
+  fi
+  # Si ratio suspect (deleted > 2x restants, avec restants > 0)
+  if [ "$after_count" -gt 0 ] && [ "$deleted" -gt $((after_count * 2)) ]; then
     log "❌ F4: ANOMALIE — ${deleted} supprimés pour ${after_count} restants. Ratio suspect."
-    log "❌ F4: Arrêt pour éviter une suppression catastrophique."
     exit 1
   fi
 
