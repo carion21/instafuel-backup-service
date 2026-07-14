@@ -36,13 +36,13 @@ if [ "$CURRENT_HOUR" = "00" ]; then
   SUBDIR="daily"
   RETENTION="30d"
   BACKUP_FILE="/tmp/instafuel-${ENV_SUFFIX}-${DATESTAMP}.dump"
-  MINIO_PATH="backup-target/${MINIO_BUCKET}/daily/instafuel-${ENV_SUFFIX}-${DATESTAMP}.dump"
+  MINIO_PATH="backup-target/${MINIO_BUCKET}/backups/daily/instafuel-${ENV_SUFFIX}-${DATESTAMP}.dump"
 else
   MODE="hourly"
   SUBDIR="hourly"
   RETENTION="6h"
   BACKUP_FILE="/tmp/instafuel-${ENV_SUFFIX}-${TIMESTAMP}.dump"
-  MINIO_PATH="backup-target/${MINIO_BUCKET}/hourly/instafuel-${ENV_SUFFIX}-${TIMESTAMP}.dump"
+  MINIO_PATH="backup-target/${MINIO_BUCKET}/backups/hourly/instafuel-${ENV_SUFFIX}-${TIMESTAMP}.dump"
 fi
 
 MIN_FREE_DISK_MB=500
@@ -182,12 +182,13 @@ upload_with_retry() {
 # F4: Cleanup avec garde-fou ratio
 # ============================================================
 cleanup_with_safeguard() {
-  local prefix="${MINIO_BUCKET}/${SUBDIR}/"
+  local prefix="${MINIO_BUCKET}/backups/${SUBDIR}/"
   local env_prefix="instafuel-${ENV_SUFFIX}-"
 
   # Compter avant cleanup
   local before_count
-  before_count=$(mc ls "backup-target/${prefix}" 2>/dev/null | grep -c "${env_prefix}" || echo 0)
+  before_count=$(mc ls "backup-target/${prefix}" 2>/dev/null | grep -c "${env_prefix}" || true)
+  before_count=${before_count:-0}
 
   if [ "$before_count" -eq 0 ]; then
     log "📦 F4: Aucun backup existant à nettoyer (${SUBDIR})"
@@ -198,10 +199,12 @@ cleanup_with_safeguard() {
 
   # mc rm --older-than utilise le timestamp serveur MinIO (F12: pas de dépendance BusyBox)
   local deleted
-  deleted=$(mc rm --force --older-than "${RETENTION}" "backup-target/${prefix}" 2>&1 | grep -c "Removed" || echo 0)
+  deleted=$(mc rm --force --older-than "${RETENTION}" "backup-target/${prefix}" 2>&1 | grep -c "Removed" || true)
+  deleted=${deleted:-0}
 
   local after_count
-  after_count=$(mc ls "backup-target/${prefix}" 2>/dev/null | grep -c "${env_prefix}" || echo 0)
+  after_count=$(mc ls "backup-target/${prefix}" 2>/dev/null | grep -c "${env_prefix}" || true)
+  after_count=${after_count:-0}
 
   # F4: Si deleted > kept * 2 → anomalie
   if [ "$deleted" -gt 0 ] && [ "$deleted" -gt $((after_count * 2)) ]; then
