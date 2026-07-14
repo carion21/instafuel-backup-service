@@ -2,12 +2,12 @@
 # ============================================================
 # setup-minio-access.sh
 # Crée l'utilisateur MinIO dédié au backup service.
+# MinIO génère les clés automatiquement.
 #
 # Usage :
-#   1. Copier ce script sur la machine qui a accès à MinIO
-#   2. Remplacer les 3 variables ci-dessous
-#   3. chmod +x setup-minio-access.sh && ./setup-minio-access.sh
-#   4. Copier MINIO_ACCESS_KEY + MINIO_SECRET_KEY dans Railway
+#   1. Remplacer les 3 variables ci-dessous
+#   2. chmod +x setup-minio-access.sh && ./setup-minio-access.sh
+#   3. Copier Access Key + Secret Key affichés → Railway
 # ============================================================
 
 # --- À REMPLACER ---
@@ -15,20 +15,15 @@ MINIO_ENDPOINT="https://minio-api.beta.geasscorp.com"
 MINIO_ROOT_USER="UeXo7y4JnmLVdZyt"
 MINIO_ROOT_PASSWORD="UXK1yFjvxrpd0de2AjHc6JACo4EO2Nsk"
 BUCKET_PHYSIQUE="instafuel"
-
-ACCESS_KEY="instafuel-backup-svc"
 # --- FIN ---
-
-# Générer un secret aléatoire
-SECRET_KEY=$(openssl rand -hex 32 2>/dev/null || python3 -c "import secrets;print(secrets.token_hex(32))")
 
 POLICY_FILE="/tmp/policy-instafuel-backup.json"
 
-# 1. Se connecter à MinIO
+# 1. Connexion MinIO
 echo "🔗 Connexion MinIO..."
 mc alias set local "${MINIO_ENDPOINT}" "${MINIO_ROOT_USER}" "${MINIO_ROOT_PASSWORD}" --api S3v4
 
-# 2. Créer la politique limitée au sous-chemin backups/
+# 2. Politique limitée à instafuel/backups/
 echo "📝 Création politique backup-only..."
 cat > "${POLICY_FILE}" <<EOF
 {
@@ -52,36 +47,17 @@ cat > "${POLICY_FILE}" <<EOF
 }
 EOF
 
-# 3. Créer le compte de service
+# 3. Créer service account — MinIO génère les clés
 echo "🔑 Création service account..."
-mc admin user svcacct add \
-  --access-key "${ACCESS_KEY}" \
-  --secret-key "${SECRET_KEY}" \
+OUTPUT=$(mc admin user svcacct add \
   --policy "${POLICY_FILE}" \
-  local "${MINIO_ROOT_USER}"
+  local "${MINIO_ROOT_USER}")
 
 rm -f "${POLICY_FILE}"
 
-# 4. Vérifier que ça marche
-echo ""
-echo "🧪 Vérification..."
-mc alias set backup-test "${MINIO_ENDPOINT}" "${ACCESS_KEY}" "${SECRET_KEY}" --api S3v4
-
-echo "  → Test accès backups/ (doit marcher) :"
-if mc ls "backup-test/${BUCKET_PHYSIQUE}/backups/" >/dev/null 2>&1; then
-  echo "    ✅ OK"
-else
-  echo "    ⚠️  Attention"
-fi
-
-echo "  → Test accès receipts/ (doit échouer) :"
-if mc ls "backup-test/${BUCKET_PHYSIQUE}/receipts/" >/dev/null 2>&1; then
-  echo "    ❌ ÉCHEC — la clé a trop de droits !"
-else
-  echo "    ✅ AccessDenied (attendu)"
-fi
-
-mc alias rm backup-test >/dev/null 2>&1
+# Extraire les clés de la sortie
+ACCESS_KEY=$(echo "$OUTPUT" | grep -o '"accessKey"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"\([^"]*\)"$/\1/')
+SECRET_KEY=$(echo "$OUTPUT" | grep -o '"secretKey"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"\([^"]*\)"$/\1/')
 
 echo ""
 echo "============================================"
