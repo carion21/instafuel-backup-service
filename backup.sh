@@ -1,11 +1,12 @@
 #!/bin/sh
 # ============================================================
 # Instafuel Backup Service — backup.sh
-# ADR-0030 — Backup PostgreSQL vers MinIO (hourly + daily)
+# ADR-0030 — Backup PostgreSQL vers MinIO.
 #
-# Deux modes (définis par BACKUP_MODE dans l'env Railway) :
-#   hourly  → retention 6h glissantes, cron 5 * * * *
-#   daily   → retention 30 jours,       cron 0 0 * * *
+# 1 seul service, 1 seul cron (5 * * * *).
+# Le script détecte automatiquement le mode :
+#   Heure 0 UTC → mode daily   (rétention 30 jours, backups/daily/)
+#   Sinon       → mode hourly  (rétention 6h,       backups/hourly/)
 #
 # 12 garde-fous documentés (cf README / ADR-0030).
 # Sortie : exit 0 = succès, exit 1 = échec (Railway log, relance).
@@ -13,7 +14,7 @@
 set -e
 
 # ============================================================
-# Config
+# Config (auto-détection du mode)
 # ============================================================
 log() { echo "[$(date -u +%Y-%m-%dT%H:%M:%SZ)] [$MODE] $*"; }
 
@@ -24,27 +25,25 @@ case "$ENV_SUFFIX" in
   *)          ENV_SUFFIX="dev" ;;
 esac
 
-MODE="${BACKUP_MODE:-hourly}"
+CURRENT_HOUR=$(date -u +%H)
 TIMESTAMP=$(date -u +%Y-%m-%d-%Hh%M)
 DATESTAMP=$(date -u +%Y-%m-%d)
 HEALTH_FILE="/tmp/last-backup.txt"
 
-case "$MODE" in
-  daily)
-    SUBDIR="daily"
-    RETENTION="30d"
-    CRON_SPEC="0 0 * * *"
-    BACKUP_FILE="/tmp/instafuel-${ENV_SUFFIX}-${DATESTAMP}.dump"
-    MINIO_PATH="backup-target/${MINIO_BUCKET}/daily/instafuel-${ENV_SUFFIX}-${DATESTAMP}.dump"
-    ;;
-  *)
-    SUBDIR="hourly"
-    RETENTION="6h"
-    CRON_SPEC="5 * * * *"
-    BACKUP_FILE="/tmp/instafuel-${ENV_SUFFIX}-${TIMESTAMP}.dump"
-    MINIO_PATH="backup-target/${MINIO_BUCKET}/hourly/instafuel-${ENV_SUFFIX}-${TIMESTAMP}.dump"
-    ;;
-esac
+# Auto-détection : minuit UTC → daily, sinon hourly
+if [ "$CURRENT_HOUR" = "00" ]; then
+  MODE="daily"
+  SUBDIR="daily"
+  RETENTION="30d"
+  BACKUP_FILE="/tmp/instafuel-${ENV_SUFFIX}-${DATESTAMP}.dump"
+  MINIO_PATH="backup-target/${MINIO_BUCKET}/daily/instafuel-${ENV_SUFFIX}-${DATESTAMP}.dump"
+else
+  MODE="hourly"
+  SUBDIR="hourly"
+  RETENTION="6h"
+  BACKUP_FILE="/tmp/instafuel-${ENV_SUFFIX}-${TIMESTAMP}.dump"
+  MINIO_PATH="backup-target/${MINIO_BUCKET}/hourly/instafuel-${ENV_SUFFIX}-${TIMESTAMP}.dump"
+fi
 
 MIN_FREE_DISK_MB=500
 UPLOAD_RETRIES=3
