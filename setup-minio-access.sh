@@ -1,5 +1,5 @@
 # Remplace par ton endpoint, MINIO_ROOT_USER et MINIO_ROOT_PASSWORD
-mc alias set local http://localhost:9000 UeXo7y4JnmLVdZyt UXK1yFjvxrpd0de2AjHc6JACo4EO2Nsk
+mc alias set local "$MINIO_ENDPOINT" "$MINIO_ROOT_USER" "$MINIO_ROOT_PASSWORD"
 
 # Crée la politique limitée au sous-chemin backups/
 cat > /tmp/policy-instafuel-backup.json <<EOF
@@ -21,4 +21,4 @@ cat > /tmp/policy-instafuel-backup.json <<EOF
 EOF
 
 # Génère les clés API automatiquement
-mc admin user svcacct add local UeXo7y4JnmLVdZyt --policy /tmp/policy-instafuel-backup.json
+mc admin user svcacct add local "$MINIO_ROOT_USER" --policy /tmp/policy-instafuel-backup.json
