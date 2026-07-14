@@ -1,5 +1,5 @@
 # Remplace par ton endpoint, MINIO_ROOT_USER et MINIO_ROOT_PASSWORD
-mc alias set local https://minio-api.beta.geasscorp.com UeXo7y4JnmLVdZyt UXK1yFjvxrpd0de2AjHc6JACo4EO2Nsk
+mc alias set local http://localhost:9000 UeXo7y4JnmLVdZyt UXK1yFjvxrpd0de2AjHc6JACo4EO2Nsk
 
 # Crée la politique limitée au sous-chemin backups/
 cat > /tmp/policy-backup.json <<EOF
